@@ -45,6 +45,10 @@ npm run dev          # in a second terminal
 3. When the deploy finishes, open the `https://<name>.onrender.com` link. Share it with your partner:
    one player creates a room under **Online Duo**, the other joins with the code.
 
+Online rooms try a WebSocket first. Render's proxy rejected WebSocket upgrades for this service, so
+the game then switches automatically to Server-Sent Events plus small batched POSTs (`/rt/*`). Add
+`?transport=ws` or `?transport=sse` to the URL to force one method.
+
 Every push to the repository redeploys automatically. On the free plan the server sleeps after
 15 minutes with no traffic, so the first visit afterwards takes about a minute to load. While a room
 is open, the game sends a keep-alive every 30 s, so it stays awake during play.
