@@ -48,9 +48,13 @@ export class World {
       };
     });
     this.boxes = (level.boxes || []).map((b) => ({ kind: 'box', x: b.x, y: b.y, w: b.size, h: b.size, rx: 0, ry: 0, vy: 0 }));
-    this.elevators = (level.elevators || []).map((e) => ({ kind: 'elevator', ...e, y0: e.y, ry: 0 }));
+    // Elevators/platforms/gates: rest at (x, y), travel to (toX, toY) while their group is active.
+    // `auto: true` makes them shuttle back and forth on their own (pausing `pause` seconds at each end).
+    this.elevators = (level.elevators || []).map((e) => ({
+      kind: 'elevator', ...e, x0: e.x, y0: e.y, toX: e.toX ?? e.x, toY: e.toY ?? e.y, rx: 0, ry: 0, phase: false, wait: 0,
+    }));
     this.plates = (level.plates || []).map((p) => ({ ...p, w: 22, pressed: false, depth: 0 }));
-    this.levers = (level.levers || []).map((l) => ({ ...l, state: 1, angle: 1 }));
+    this.levers = (level.levers || []).map((l) => ({ ...l, state: l.state ?? 1, initial: l.state ?? 1, angle: l.state ?? 1, touching: new Set() }));
     this.gems = level.gems.map((g) => ({ ...g, taken: false }));
     this.doors = { fire: { ...level.doors.fire, open: 0 }, water: { ...level.doors.water, open: 0 } };
     this.collected = { fire: 0, water: 0 };
@@ -204,20 +208,64 @@ export class World {
     for (const l of this.levers) {
       const zone = { x: l.x - 10, y: l.y - 12, w: 20, h: 12 }; // the handle: jumping over it leaves it alone
       for (const c of this.chars) {
-        if (!c.alive || !overlap(zone, c)) continue;
-        if (c.vx > 15 && l.state === -1 && c.x + c.w / 2 < l.x + 4) { l.state = 1; this.events.push({ type: 'lever' }); }
-        if (c.vx < -15 && l.state === 1 && c.x + c.w / 2 > l.x - 4) { l.state = -1; this.events.push({ type: 'lever' }); }
+        // a character flips a lever at most once per touch, so turning around on it doesn't undo the flip
+        if (!c.alive || !overlap(zone, c)) { l.touching.delete(c.type); continue; }
+        if (l.touching.has(c.type)) continue;
+        if (c.vx > 15 && l.state === -1 && c.x + c.w / 2 < l.x + 4) { l.state = 1; l.touching.add(c.type); this.events.push({ type: 'lever' }); }
+        else if (c.vx < -15 && l.state === 1 && c.x + c.w / 2 > l.x - 4) { l.state = -1; l.touching.add(c.type); this.events.push({ type: 'lever' }); }
       }
       l.angle += (l.state - l.angle) * 0.3;
     }
-    // elevators follow their group's control
+    // elevators follow their group's control (or shuttle on their own when `auto`)
     for (const e of this.elevators) {
-      const active = this.plates.some((p) => p.group === e.group && p.pressed)
-        || this.levers.some((l) => l.group === e.group && l.state === -1);
-      const target = active ? e.toY : e.y0;
-      const pos = e.y + e.ry;
-      const dy = Math.sign(target - pos) * Math.min(Math.abs(target - pos), (e.speed || 40) * STEP);
-      this.moveElevator(e, dy);
+      let active;
+      if (e.auto) {
+        const atEnd = (e.phase ? e.x === e.toX && e.y === e.toY : e.x === e.x0 && e.y === e.y0);
+        if (atEnd) { e.wait += STEP; if (e.wait >= (e.pause ?? 1)) { e.phase = !e.phase; e.wait = 0; } }
+        active = e.phase;
+      } else {
+        active = this.groupActive(e);
+      }
+      const tx = active ? e.toX : e.x0, ty = active ? e.toY : e.y0;
+      const v = (e.speed || 40) * STEP;
+      const px = e.x + e.rx, py = e.y + e.ry;
+      const dist = Math.hypot(tx - px, ty - py);
+      if (dist < 1e-6) continue;
+      const k = Math.min(1, v / dist);
+      this.moveElevatorX(e, (tx - px) * k);
+      this.moveElevator(e, (ty - py) * k);
+    }
+  }
+
+  // A group is driven by its plates (any one held, or every one with `require: 'all'`) and its levers,
+  // which act like two-way switches: each flip toggles it. `latch: true` keeps it on once triggered.
+  groupActive(e) {
+    const plates = this.plates.filter((p) => p.group === e.group);
+    const levers = this.levers.filter((l) => l.group === e.group);
+    let on = e.require === 'all' ? plates.length > 0 && plates.every((p) => p.pressed) : plates.some((p) => p.pressed);
+    if (levers.length) on = on || levers.filter((l) => l.state !== l.initial).length % 2 === 1; // each flip toggles
+    if (e.latch) { e.latched = e.latched || on; on = e.latched; }
+    return on;
+  }
+
+  // Sideways travel: carries riders and shoves characters/boxes standing in the way.
+  moveElevatorX(e, dx) {
+    e.rx += dx;
+    let move = Math.round(e.rx);
+    e.rx -= move;
+    const sign = Math.sign(move);
+    while (move !== 0) {
+      const riders = this.ridersOf(e);
+      const ahead = { x: sign > 0 ? e.x + e.w : e.x - 1, y: e.y, w: 1, h: e.h };
+      if (this.maskHit(ahead.x, ahead.y, 1, ahead.h)) { e.rx = 0; return; }
+      for (const o of [...this.chars.filter((c) => c.alive), ...this.boxes]) {
+        if (riders.includes(o) || !overlap(ahead, o)) continue;
+        if (this.solidAt(o.x + sign, o.y, o.w, o.h, o)) { e.rx = 0; return; } // pinned: the platform waits
+        o.x += sign;
+      }
+      e.x += sign;
+      for (const r of riders) if (!this.solidAt(r.x + sign, r.y, r.w, r.h, r)) r.x += sign;
+      move -= sign;
     }
   }
 
@@ -299,7 +347,7 @@ export class World {
       t: Math.round(this.time * 1000), s: this.status, d: this.deadType,
       c: this.chars.map((c) => [c.x, c.y, Math.round(c.vx), Math.round(c.vy), c.grounded ? 1 : 0, c.facing, c.alive ? 1 : 0, c.atDoor ? 1 : 0, +c.inDoor.toFixed(2), c.pushing ? 1 : 0]),
       b: this.boxes.map((b) => [b.x, b.y]),
-      e: this.elevators.map((e) => e.y),
+      e: this.elevators.map((e) => [e.x, e.y]),
       p: this.plates.map((p) => (p.pressed ? 1 : 0)),
       l: this.levers.map((l) => l.state),
       g: this.gems.map((g) => (g.taken ? 1 : 0)),
@@ -315,7 +363,7 @@ export class World {
       [c.x, c.y, c.vx, c.vy] = a; c.grounded = !!a[4]; c.facing = a[5]; c.alive = !!a[6]; c.atDoor = !!a[7]; c.inDoor = a[8]; c.pushing = !!a[9];
     });
     s.b.forEach((a, i) => { this.boxes[i].x = a[0]; this.boxes[i].y = a[1]; });
-    s.e.forEach((y, i) => { this.elevators[i].y = y; });
+    s.e.forEach(([x, y], i) => { this.elevators[i].x = x; this.elevators[i].y = y; });
     s.p.forEach((v, i) => { const p = this.plates[i]; p.pressed = !!v; p.depth += ((v ? 1 : 0) - p.depth) * 0.35; });
     s.l.forEach((v, i) => { const l = this.levers[i]; l.state = v; l.angle += (v - l.angle) * 0.3; });
     let collected = { fire: 0, water: 0 };

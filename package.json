@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/server.js",
-    "start": "vite build && node server/server.js"
+    "start": "vite build && node server/server.js",
+    "test": "node tests/run.mjs"
   },
   "type": "module",
   "dependencies": {

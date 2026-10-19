@@ -7,6 +7,7 @@ import { sfx } from '../game/sfx.js';
 import { LEVELS } from '../levels/index.js';
 import { buildLevelTextures } from '../art/level.js';
 import { ANIMS, FEET_X, FEET_Y, FRAME_W, FRAME_H } from '../art/characters.js';
+import { mechTexture } from '../art/objects.js';
 import { setupCamera, img, spr, txt, button, panelTexture, fadeTo, saveLevelResult, formatTime } from './helpers.js';
 
 const LIQUID = {
@@ -49,6 +50,9 @@ export default class GameScene extends Phaser.Scene {
       this.motes.push(m);
     }
     this.liquids = this.add.graphics();
+    // gates sit behind the stone so they appear to slide into the wall
+    const sprite = (e) => img(this, e.x, e.y, mechTexture(this, e.color || 'yellow', e.w, e.h, e.kind === 'gate' ? 'gate' : 'platform')).setOrigin(0, 0);
+    const gateSprites = new Map(this.world.elevators.filter((e) => e.kind === 'gate').map((e) => [e, sprite(e)]));
     img(this, WIDTH / 2, HEIGHT / 2, `stone-${this.level.id}`);
 
     for (const t of this.level.texts || []) this.richText(t);
@@ -63,14 +67,14 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.plateSprites = this.world.plates.map((p) => ({
-      button: img(this, p.x, p.y - 5, 'plate-button').setOrigin(0.5, 0.5).setScale(0.65),
+      button: img(this, p.x, p.y - 5, `plate-button-${p.color || 'purple'}`).setOrigin(0.5, 0.5).setScale(0.65),
       base: img(this, p.x, p.y - 3, 'plate-base').setScale(0.55),
     }));
     this.leverSprites = this.world.levers.map((l) => ({
       handle: img(this, l.x, l.y - 4, 'lever-handle').setOrigin(0.5, 0.95),
-      base: img(this, l.x, l.y - 4.5, 'lever-base'),
+      base: img(this, l.x, l.y - 4.5, `lever-base-${l.color || 'yellow'}`),
     }));
-    this.elevatorSprites = this.world.elevators.map((e) => img(this, e.x, e.y, `elevator-${e.color}`).setOrigin(0, 0).setDisplaySize(e.w, e.h + 2));
+    this.elevatorSprites = this.world.elevators.map((e) => gateSprites.get(e) || sprite(e));
     this.boxSprites = this.world.boxes.map((b) => img(this, b.x, b.y, 'box').setOrigin(0, 0));
     this.gemSprites = this.world.gems.map((g, i) => {
       const s = img(this, g.x, g.y, `gem-${g.type}`).setScale(0.62);
@@ -105,7 +109,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   richText({ x, y, size, parts }) {
-    const colors = { gold: COLORS.gold, blue: '#4cc0ff', red: '#ff4a2a' };
+    const colors = { gold: COLORS.gold, blue: '#4cc0ff', red: '#ff4a2a', purple: '#cf86f0', green: '#7fe060', cyan: '#5fe0f5', orange: '#ffaa50' };
     const pieces = parts.map(([s, c]) => (s === '← ↑ →' ? this.arrowGlyphs(y, size) : txt(this, 0, y, s, size, colors[c], { ox: 0, strokeThickness: 3 })));
     const total = pieces.reduce((a, p) => a + p.width, 0);
     let cx = x - total / 2;

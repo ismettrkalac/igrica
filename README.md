@@ -75,8 +75,29 @@ src/scenes/         Boot, Title, Menu, LevelSelect, Game, Lobby
 src/net/            WebSocket client
 ```
 
+## Levels
+
+| # | Name | Idea |
+|---|---|---|
+| 1 | Forest Temple 1 | Traced from the original |
+| 2 | Lift Swap | Each lift only rises while your partner holds its button; ride the shuttle up to the doors |
+| 3 | Poison River | Lever raft across poison (either lever moves it); box on a button holds a gate open |
+| 4 | Clockwork | Self-running lifts; both purple buttons held together unlock the door ledge |
+
+Levels unlock one after another on the map; the remaining nodes stay locked until they get a level.
+
+### Adding a level
+
+1. Copy `src/levels/level2.js` to `src/levels/levelN.js` and edit the shapes. `build.js` explains the
+   format: platforms, ramps, blocks, pools, gems, doors, buttons, levers and elevators (`kind: 'gate'`,
+   `auto: true`, `toX`/`toY`, `require: 'all'`, `latch: true`).
+2. Register it in `src/levels/index.js` (`LEVELS`).
+3. Check it with `?level=N` in the browser, and ideally add a scripted playthrough in `tests/`
+   (see `tests/level3.test.mjs`). `npm test` runs them all.
+4. Commit and push; Render redeploys.
+
 ## Status
 
-- Level 1 is recreated from the reference and is completable. The other 31 map nodes are shown but
-  locked until their levels are captured and traced.
+- Level 1 is recreated from the reference; levels 2–4 are original designs. All four are proven
+  completable by scripted playthroughs (`npm test`).
 - Some details could not be checked against the original. See `reference/NOTES.md`.

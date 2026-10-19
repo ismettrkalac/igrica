@@ -1,6 +1,33 @@
 import { COLORS } from '../config.js';
 import { makeTexture, makeFrames, glow, shade, rgba } from './util.js';
 
+// Colour sets for buttons, levers and the platforms/gates they drive (null = plain gold, as in level 1).
+export const MECH_COLORS = { yellow: null, purple: '#a745cd', green: '#3fbf3a', cyan: '#2ec8e6', orange: '#ff8a1e', white: '#e6e6e6' };
+
+// Moving platform or gate texture drawn at its exact size: gold frame with a coloured inlay.
+export function mechTexture(scene, color, w, h, kind = 'platform') {
+  const key = `${kind}-${color}-${w}x${h}`;
+  if (scene.textures.exists(key)) return key;
+  const inner = MECH_COLORS[color] ?? null;
+  makeTexture(scene, key, w, h, (ctx) => {
+    ctx.fillStyle = '#c9a93a'; ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 1.2;
+    ctx.fillRect(0.6, 0.6, w - 1.2, h - 1.2); ctx.strokeRect(0.6, 0.6, w - 1.2, h - 1.2);
+    ctx.fillStyle = '#f3dc7a'; ctx.fillRect(1.5, 1.5, w - 3, 1.5);
+    ctx.fillStyle = '#8a6c18'; ctx.fillRect(1.5, h - 3, w - 3, 1.6);
+    const ix = 3.5, iy = 4, iw = w - 7, ih = h - 8;
+    if (iw > 0 && ih > 0) {
+      ctx.fillStyle = inner ? shade(inner, -0.35) : '#e2c64a'; ctx.fillRect(ix, iy, iw, ih);
+      ctx.fillStyle = inner || 'rgba(255,255,255,0.35)';
+      if (kind === 'gate') ctx.fillRect(ix, iy, Math.max(1.5, iw * 0.45), ih); else ctx.fillRect(ix, iy, iw, Math.max(1.5, ih * 0.45));
+    }
+    if (kind === 'gate') { // rivets
+      ctx.fillStyle = '#7a5c14';
+      for (let y = 10; y < h - 6; y += 16) { ctx.beginPath(); ctx.arc(w / 2, y, 1.2, 0, Math.PI * 2); ctx.fill(); }
+    }
+  });
+  return key;
+}
+
 export function drawGem(ctx, cx, cy, color, scale = 1) {
   const base = color === 'fire' ? COLORS.red : color === 'water' ? COLORS.blue : color === 'green' ? '#3fbf3a' : '#5a5a5a';
   const light = color === 'fire' ? '#ff7a5c' : color === 'water' ? '#c4f2ff' : color === 'green' ? '#a8f59a' : '#9a9a9a';
@@ -81,18 +108,23 @@ export function buildObjectTextures(scene) {
     ctx.beginPath(); ctx.moveTo(1, 5.5); ctx.lineTo(4, 1); ctx.lineTo(22, 1); ctx.lineTo(25, 5.5); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#f0d266'; ctx.fillRect(5, 1.6, 16, 1);
   });
-  makeTexture(scene, 'plate-button', 16, 6, (ctx) => {
-    ctx.fillStyle = COLORS.purple; ctx.strokeStyle = '#2a0838'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.ellipse(8, 4, 6.5, 2.6, 0, Math.PI, 0); ctx.lineTo(14.5, 5.5); ctx.lineTo(1.5, 5.5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#e2a2ff'; ctx.fillRect(5, 2.2, 5, 1);
-  });
+  for (const [name, col] of Object.entries(MECH_COLORS)) {
+    if (!col) continue;
+    makeTexture(scene, `plate-button-${name}`, 16, 6, (ctx) => {
+      ctx.fillStyle = col; ctx.strokeStyle = shade(col, -0.75); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(8, 4, 6.5, 2.6, 0, Math.PI, 0); ctx.lineTo(14.5, 5.5); ctx.lineTo(1.5, 5.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = shade(col, 0.55); ctx.fillRect(5, 2.2, 5, 1);
+    });
+  }
 
   // lever: base and handle (pivot at the bottom of the handle)
-  makeTexture(scene, 'lever-base', 20, 9, (ctx) => {
-    ctx.fillStyle = '#c4a63c'; ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(1, 8.5); ctx.lineTo(4, 2); ctx.lineTo(16, 2); ctx.lineTo(19, 8.5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#f2dc78'; ctx.fillRect(5, 3, 10, 1.2);
-  });
+  for (const [name, col] of Object.entries(MECH_COLORS)) {
+    makeTexture(scene, `lever-base-${name}`, 20, 9, (ctx) => {
+      ctx.fillStyle = '#c4a63c'; ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(1, 8.5); ctx.lineTo(4, 2); ctx.lineTo(16, 2); ctx.lineTo(19, 8.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = col || '#f2dc78'; ctx.fillRect(5, 3, 10, col ? 2.2 : 1.2);
+    });
+  }
   makeTexture(scene, 'lever-handle', 8, 20, (ctx) => {
     ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 3.2; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(4, 19); ctx.lineTo(4, 5); ctx.stroke();
@@ -101,23 +133,6 @@ export function buildObjectTextures(scene) {
     ctx.fillStyle = '#e8cf62'; ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(4, 4, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   });
-
-  // elevators
-  for (const [key, inner] of [['purple', COLORS.purple], ['yellow', null]]) {
-    makeTexture(scene, `elevator-${key}`, 60, 14, (ctx) => {
-      ctx.fillStyle = '#c9a93a'; ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.rect(0.6, 0.6, 58.8, 12.8); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#f3dc7a'; ctx.fillRect(1.5, 1.5, 57, 1.5);
-      ctx.fillStyle = '#8a6c18'; ctx.fillRect(1.5, 11, 57, 1.6);
-      if (inner) {
-        ctx.fillStyle = shade(inner, -0.35); ctx.fillRect(4, 4.5, 52, 5);
-        ctx.fillStyle = inner; ctx.fillRect(4, 4.5, 52, 2.4);
-      } else {
-        ctx.fillStyle = '#e2c64a'; ctx.fillRect(4, 4.5, 52, 5);
-        ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(4, 4.5, 52, 1.5);
-      }
-    });
-  }
 
   // push box: grey stone with gold corner caps
   makeTexture(scene, 'box', 26, 26, (ctx) => {
