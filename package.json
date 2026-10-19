@@ -1,0 +1,26 @@
+{
+  "name": "fireboy-watergirl-remake",
+  "version": "1.0.0",
+  "description": "Browser recreation of Fireboy & Watergirl in the Forest Temple (Phaser 3 + Vite) with local and online co-op",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server/server.js",
+    "start": "vite build && node server/server.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "@fontsource/cinzel": "^5.2.6",
+    "@fontsource/uncial-antiqua": "^5.2.6",
+    "phaser": "^3.80.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.4"
+  },
+  "private": true,
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

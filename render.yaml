@@ -1,0 +1,14 @@
+# Render Blueprint: one free web service that serves the game and runs the co-op rooms.
+# Render dashboard → New → Blueprint → pick this repository.
+services:
+  - type: web
+    name: fireboy-watergirl
+    runtime: node
+    plan: free
+    # Vite is a dev dependency, so include dev deps for the build step
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node server/server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
