@@ -2,10 +2,13 @@ import level1 from './level1.js';
 import level2 from './level2.js';
 import level3 from './level3.js';
 import level4 from './level4.js';
+import level5 from './level5.js';
+import level6 from './level6.js';
+import level7 from './level7.js';
 
-// Level 1 is traced from the original; levels 2-4 are new designs in the same style.
+// Level 1 is traced from the original; levels 2-7 are new designs in the same style.
 // Other nodes on the map are shown but locked until they get a level.
-export const LEVELS = { 1: level1, 2: level2, 3: level3, 4: level4 };
+export const LEVELS = { 1: level1, 2: level2, 3: level3, 4: level4, 5: level5, 6: level6, 7: level7 };
 
 // Level-select map nodes (native px), traced from reference/05-level-select.jpg.
 // kind: 'gem' (normal), 'tri' (move-together), 'big' (green diamond); `from` = parent node.

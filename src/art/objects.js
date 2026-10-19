@@ -28,6 +28,48 @@ export function mechTexture(scene, color, w, h, kind = 'platform') {
   return key;
 }
 
+// Fan grate drawn at its exact width: dark metal frame with slats.
+export function fanTexture(scene, w) {
+  const key = `fan-${w}`;
+  if (scene.textures.exists(key)) return key;
+  makeTexture(scene, key, w, 8, (ctx) => {
+    ctx.fillStyle = '#3a3a34'; ctx.strokeStyle = COLORS.outline; ctx.lineWidth = 1.2;
+    ctx.fillRect(0.6, 0.6, w - 1.2, 6.8); ctx.strokeRect(0.6, 0.6, w - 1.2, 6.8);
+    ctx.fillStyle = '#9a9a88';
+    for (let x = 4; x < w - 3; x += 5) ctx.fillRect(x, 2, 2.2, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(1.5, 1.2, w - 3, 1);
+  });
+  return key;
+}
+
+export const PORTAL_COLORS = { violet: '#b070ff', teal: '#40e0c0', amber: '#ffb040', rose: '#ff70b0' };
+
+function buildPortalTextures(scene) {
+  for (const [name, col] of Object.entries(PORTAL_COLORS)) {
+    makeTexture(scene, `portal-ring-${name}`, 34, 50, (ctx) => {
+      glow(ctx, 17, 25, 22, col, 0.45);
+      ctx.strokeStyle = shade(col, -0.5); ctx.lineWidth = 4.5;
+      ctx.beginPath(); ctx.ellipse(17, 25, 11, 19, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.ellipse(17, 25, 11, 19, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = rgba(col, 0.18);
+      ctx.beginPath(); ctx.ellipse(17, 25, 9.5, 17.5, 0, 0, Math.PI * 2); ctx.fill();
+    });
+    makeTexture(scene, `portal-swirl-${name}`, 30, 30, (ctx) => {
+      ctx.strokeStyle = rgba(shade(col, 0.5), 0.8); ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        for (let t = 0; t < 1; t += 0.05) {
+          const a = k * 2.094 + t * 4.2, r = 2 + t * 11;
+          const x = 15 + Math.cos(a) * r, y = 15 + Math.sin(a) * r;
+          if (t === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    });
+  }
+}
+
 export function drawGem(ctx, cx, cy, color, scale = 1) {
   const base = color === 'fire' ? COLORS.red : color === 'water' ? COLORS.blue : color === 'green' ? '#3fbf3a' : '#5a5a5a';
   const light = color === 'fire' ? '#ff7a5c' : color === 'water' ? '#c4f2ff' : color === 'green' ? '#a8f59a' : '#9a9a9a';
@@ -171,6 +213,7 @@ export function buildObjectTextures(scene) {
     ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(5, 10); ctx.moveTo(0, 5); ctx.lineTo(10, 5); ctx.stroke();
   });
 
+  buildPortalTextures(scene);
   buildHudTextures(scene);
 }
 

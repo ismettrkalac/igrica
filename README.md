@@ -83,6 +83,14 @@ src/net/            WebSocket client
 | 2 | Lift Swap | Each lift only rises while your partner holds its button; ride the shuttle up to the doors |
 | 3 | Poison River | Lever raft across poison (either lever moves it); box on a button holds a gate open |
 | 4 | Clockwork | Self-running lifts; both purple buttons held together unlock the door ledge |
+| 5 | Wind Tunnel | Each fan runs on your partner's timed button; a lever and a box power the rest |
+| 6 | Portal Puzzle | Push the box off your fan into a one-way portal; a two-way portal leads up |
+| 7 | Grand Machine | A five-step chain where every switch helps your partner, never yourself |
+
+Mechanisms available to levels: lava/water/poison pools, gems, doors, pressure plates (optionally
+timed), levers (each flip toggles), boxes, lifts and gates (sliding, self-cycling, inverted,
+"both buttons", latching), fans (a box on the grate blocks them) and portals (two-way or one-way;
+boxes travel through them too).
 
 Levels unlock one after another on the map; the remaining nodes stay locked until they get a level.
 
@@ -98,6 +106,6 @@ Levels unlock one after another on the map; the remaining nodes stay locked unti
 
 ## Status
 
-- Level 1 is recreated from the reference; levels 2–4 are original designs. All four are proven
+- Level 1 is recreated from the reference; levels 2–7 are original designs. All seven are proven
   completable by scripted playthroughs (`npm test`).
 - Some details could not be checked against the original. See `reference/NOTES.md`.

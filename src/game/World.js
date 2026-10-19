@@ -53,7 +53,12 @@ export class World {
     this.elevators = (level.elevators || []).map((e) => ({
       kind: 'elevator', ...e, x0: e.x, y0: e.y, toX: e.toX ?? e.x, toY: e.toY ?? e.y, rx: 0, ry: 0, phase: false, wait: 0,
     }));
-    this.plates = (level.plates || []).map((p) => ({ ...p, w: 22, pressed: false, depth: 0 }));
+    // plates with `timer` stay pressed for that many seconds after being released
+    this.plates = (level.plates || []).map((p) => ({ ...p, w: 22, pressed: false, depth: 0, left: 0 }));
+    // fans blow upward through a column [x, x+w] from base y up to `top`; a box resting on the grate blocks them
+    this.fans = (level.fans || []).map((f) => ({ ...f, on: false, blocked: false }));
+    // portal pairs { a: {x, y}, b: {x, y}, oneWay }: x is the centre, y the floor the portal stands on
+    this.portals = (level.portals || []).map((p) => ({ ...p }));
     this.levers = (level.levers || []).map((l) => ({ ...l, state: l.state ?? 1, initial: l.state ?? 1, angle: l.state ?? 1, touching: new Set() }));
     this.gems = level.gems.map((g) => ({ ...g, taken: false }));
     this.doors = { fire: { ...level.doors.fire, open: 0 }, water: { ...level.doors.water, open: 0 } };
@@ -148,6 +153,7 @@ export class World {
     if (this.status === 'playing') this.time += STEP;
 
     this.stepMechanisms();
+    this.stepFans();
 
     for (const c of this.chars) {
       if (!c.alive || this.status !== 'playing') continue;
@@ -157,6 +163,7 @@ export class World {
       b.vy = Math.min(b.vy + PHYS.gravity * STEP, PHYS.maxFall);
       if (!this.moveY(b, b.vy * STEP)) b.vy = 0;
     }
+    if (this.portals.length) this.checkPortals();
     if (this.status === 'playing') this.checkInteractions();
     this.stepDoors();
   }
@@ -178,6 +185,7 @@ export class World {
 
     if (inp.up && g && c.vy >= 0) { c.vy = -PHYS.jumpSpeed; c.grounded = false; this.events.push({ type: 'jump', char: c.type }); }
     c.vy = Math.min(c.vy + PHYS.gravity * STEP, PHYS.maxFall);
+    this.applyWind(c);
 
     const wasGrounded = c.grounded;
     this.moveX(c, c.vx * STEP, true);
@@ -199,8 +207,10 @@ export class World {
     for (const p of this.plates) {
       const zone = { x: p.x - p.w / 2, y: p.y - 8, w: p.w, h: 9 };
       const was = p.pressed;
-      p.pressed = this.chars.some((c) => c.alive && overlap(zone, c) && c.y + c.h >= p.y - 2)
+      const held = this.chars.some((c) => c.alive && overlap(zone, c) && c.y + c.h >= p.y - 2)
         || this.boxes.some((b) => overlap(zone, b) && b.y + b.h >= p.y - 2);
+      if (p.timer) p.left = held ? p.timer : Math.max(0, p.left - STEP);
+      p.pressed = held || p.left > 0;
       p.depth += ((p.pressed ? 1 : 0) - p.depth) * 0.35;
       if (p.pressed !== was) this.events.push({ type: p.pressed ? 'plateDown' : 'plateUp' });
     }
@@ -224,7 +234,7 @@ export class World {
         if (atEnd) { e.wait += STEP; if (e.wait >= (e.pause ?? 1)) { e.phase = !e.phase; e.wait = 0; } }
         active = e.phase;
       } else {
-        active = this.groupActive(e);
+        active = e.invert ? !this.groupActive(e) : this.groupActive(e);
       }
       const tx = active ? e.toX : e.x0, ty = active ? e.toY : e.y0;
       const v = (e.speed || 40) * STEP;
@@ -234,6 +244,48 @@ export class World {
       const k = Math.min(1, v / dist);
       this.moveElevatorX(e, (tx - px) * k);
       this.moveElevator(e, (ty - py) * k);
+    }
+  }
+
+  stepFans() {
+    for (const f of this.fans) {
+      f.blocked = this.boxes.some((b) => overlap(b, { x: f.x + 4, y: f.y - 3, w: f.w - 8, h: 3 }));
+      const powered = f.group ? (f.invert ? !this.groupActive(f) : this.groupActive(f)) : true;
+      const was = f.on;
+      f.on = powered && !f.blocked;
+      if (f.on !== was) this.events.push({ type: f.on ? 'fanOn' : 'fanOff' });
+    }
+  }
+
+  // wind: strongest low in the column, fading near the top so characters hover there
+  applyWind(c) {
+    for (const f of this.fans) {
+      if (!f.on || !overlap(c, { x: f.x, y: f.top, w: f.w, h: f.y - f.top })) continue;
+      const k = Math.min(1, Math.max(0, (c.y + c.h - f.top) / 40));
+      c.vy = Math.max(-150, (c.vy - 1150 * k * STEP) * 0.965);
+      c.grounded = false;
+    }
+  }
+
+  checkPortals() {
+    const ents = [...this.chars.filter((c) => c.alive), ...this.boxes];
+    for (const ent of ents) {
+      const ecx = ent.x + ent.w / 2;
+      const inside = (p) => Math.abs(ecx - p.x) <= 10 && ent.y < p.y && ent.y + ent.h > p.y - 40;
+      if (ent.portalLock && !inside(ent.portalLock)) ent.portalLock = null;
+      if (ent.portalLock) continue;
+      for (const pair of this.portals) {
+        const ends = pair.oneWay ? [[pair.a, pair.b]] : [[pair.a, pair.b], [pair.b, pair.a]];
+        const hit = ends.find(([src]) => inside(src));
+        if (!hit) continue;
+        const [, dst] = hit;
+        const nx = Math.round(dst.x - ent.w / 2), ny = dst.y - ent.h;
+        if (this.solidAt(nx, ny, ent.w, ent.h, ent)) continue; // exit blocked
+        ent.x = nx; ent.y = ny; ent.rx = 0; ent.ry = 0;
+        ent.portalLock = dst;
+        this.events.push({ type: 'portal', x: dst.x, y: dst.y - 20 });
+        break;
+      }
     }
   }
 
@@ -349,6 +401,8 @@ export class World {
       b: this.boxes.map((b) => [b.x, b.y]),
       e: this.elevators.map((e) => [e.x, e.y]),
       p: this.plates.map((p) => (p.pressed ? 1 : 0)),
+      pt: this.plates.map((p) => +p.left.toFixed(1)),
+      f: this.fans.map((f) => (f.on ? 1 : 0)),
       l: this.levers.map((l) => l.state),
       g: this.gems.map((g) => (g.taken ? 1 : 0)),
       o: [+this.doors.fire.open.toFixed(2), +this.doors.water.open.toFixed(2)],
@@ -365,6 +419,8 @@ export class World {
     s.b.forEach((a, i) => { this.boxes[i].x = a[0]; this.boxes[i].y = a[1]; });
     s.e.forEach(([x, y], i) => { this.elevators[i].x = x; this.elevators[i].y = y; });
     s.p.forEach((v, i) => { const p = this.plates[i]; p.pressed = !!v; p.depth += ((v ? 1 : 0) - p.depth) * 0.35; });
+    (s.pt || []).forEach((v, i) => { this.plates[i].left = v; });
+    (s.f || []).forEach((v, i) => { this.fans[i].on = !!v; });
     s.l.forEach((v, i) => { const l = this.levers[i]; l.state = v; l.angle += (v - l.angle) * 0.3; });
     let collected = { fire: 0, water: 0 };
     s.g.forEach((v, i) => { this.gems[i].taken = !!v; if (v) collected[this.gems[i].type]++; });

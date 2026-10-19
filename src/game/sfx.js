@@ -51,6 +51,8 @@ export const sfx = {
   plate: () => tone({ f0: 220, f1: 160, dur: 0.08, type: 'square', vol: 0.04 }),
   win: () => [523, 659, 784, 1046].forEach((f, i) => tone({ f0: f, dur: 0.25, vol: 0.08, delay: i * 0.11 })),
   click: () => tone({ f0: 600, f1: 500, dur: 0.05, type: 'triangle', vol: 0.05 }),
+  portal: () => { tone({ f0: 300, f1: 900, dur: 0.18, type: 'sine', vol: 0.07 }); tone({ f0: 450, f1: 1200, dur: 0.22, vol: 0.05, delay: 0.04 }); },
+  fan: () => noise(0.35, 0.08),
   get muted() { return muted; },
   toggle() { muted = !muted; try { localStorage.setItem('fbwg-muted', muted ? '1' : '0'); } catch { /* ignore */ } return muted; },
   unlock() { ac(); },

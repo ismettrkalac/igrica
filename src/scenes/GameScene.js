@@ -7,7 +7,7 @@ import { sfx } from '../game/sfx.js';
 import { LEVELS } from '../levels/index.js';
 import { buildLevelTextures } from '../art/level.js';
 import { ANIMS, FEET_X, FEET_Y, FRAME_W, FRAME_H } from '../art/characters.js';
-import { mechTexture } from '../art/objects.js';
+import { mechTexture, fanTexture, PORTAL_COLORS } from '../art/objects.js';
 import { setupCamera, img, spr, txt, button, panelTexture, fadeTo, saveLevelResult, formatTime } from './helpers.js';
 
 const LIQUID = {
@@ -75,6 +75,20 @@ export default class GameScene extends Phaser.Scene {
       base: img(this, l.x, l.y - 4.5, `lever-base-${l.color || 'yellow'}`),
     }));
     this.elevatorSprites = this.world.elevators.map((e) => gateSprites.get(e) || sprite(e));
+    this.wind = this.add.graphics();
+    this.fanSprites = this.world.fans.map((f) => img(this, f.x, f.y - 7, fanTexture(this, f.w)).setOrigin(0, 0));
+    this.portalSprites = [];
+    for (const pair of this.world.portals) {
+      const color = PORTAL_COLORS[pair.color] ? pair.color : 'violet';
+      for (const [end, isExit] of [[pair.a, false], [pair.b, true]]) {
+        const ring = img(this, end.x, end.y - 21, `portal-ring-${color}`);
+        const swirl = img(this, end.x, end.y - 21, `portal-swirl-${color}`).setScale(0.5, 0.9);
+        if (pair.oneWay && isExit) { ring.setAlpha(0.6); swirl.setAlpha(0.45); }
+        if (pair.oneWay && !isExit) txt(this, end.x, end.y - 50, '\u25BC', 8, PORTAL_COLORS[color], { strokeThickness: 2 });
+        this.portalSprites.push({ ring, swirl, dir: isExit ? -1 : 1 });
+      }
+    }
+    this.timers = this.add.graphics();
     this.boxSprites = this.world.boxes.map((b) => img(this, b.x, b.y, 'box').setOrigin(0, 0));
     this.gemSprites = this.world.gems.map((g, i) => {
       const s = img(this, g.x, g.y, `gem-${g.type}`).setScale(0.62);
@@ -233,6 +247,8 @@ export default class GameScene extends Phaser.Scene {
       else if (e.type === 'gem') { sfx.gem(); this.sparkle(e.x, e.y, e.gem); }
       else if (e.type === 'lever') sfx.lever();
       else if (e.type === 'plateDown') sfx.plate();
+      else if (e.type === 'portal') sfx.portal();
+      else if (e.type === 'fanOn') sfx.fan();
       else if (e.type === 'win') sfx.win();
       else if (e.type === 'death') {
         sfx.death();
@@ -293,6 +309,17 @@ export default class GameScene extends Phaser.Scene {
     w.elevators.forEach((e, i) => this.elevatorSprites[i].setPosition(e.x, e.y));
     w.plates.forEach((p, i) => { this.plateSprites[i].button.y = p.y - 5 + p.depth * 3; });
     w.levers.forEach((l, i) => { this.leverSprites[i].handle.rotation = l.angle * 0.78; });
+    this.drawWind();
+    for (const p of this.portalSprites) p.swirl.rotation += dt * 3 * p.dir;
+    // timed buttons: a shrinking ring shows how long they stay on after release
+    this.timers.clear();
+    w.plates.forEach((p) => {
+      if (!p.timer || p.left <= 0 || p.left >= p.timer - 0.05) return;
+      this.timers.lineStyle(2, 0xffe080, 0.9);
+      this.timers.beginPath();
+      this.timers.arc(p.x, p.y - 16, 6, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p.left) / p.timer);
+      this.timers.strokePath();
+    });
 
     for (const type of ['fire', 'water']) {
       const d = w.doors[type];
@@ -301,6 +328,24 @@ export default class GameScene extends Phaser.Scene {
       const off = Math.round(d.open * hRes);
       panel.y = d.y + 4 - d.open * 39;
       panel.setCrop(0, off, 34 * RES, hRes - off);
+    }
+  }
+
+  drawWind() {
+    const g = this.wind;
+    g.clear();
+    const t = this.time.now / 1000;
+    for (const f of this.world.fans) {
+      if (!f.on) continue;
+      const hgt = f.y - f.top;
+      for (let i = 0; i < Math.max(3, f.w / 9); i++) {
+        const x = f.x + 4 + ((i * 37) % Math.max(1, f.w - 8));
+        const phase = (t * 1.6 + i * 0.37) % 1;
+        const y = f.y - 8 - phase * hgt;
+        const len = 10 + (i % 3) * 5;
+        g.lineStyle(1.4, 0xffffff, 0.28 * (1 - phase) + 0.05);
+        g.lineBetween(x + Math.sin(t * 4 + i) * 1.5, y, x, y + len);
+      }
     }
   }
 
